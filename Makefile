@@ -14,6 +14,10 @@ up: ## Jalankan semua container (api & web)
 deploy: ## Deploy backend ke Google Cloud Run
 	bash scripts/deploy.sh
 
+deploy-fe: ## Deploy frontend ke Firebase Hosting
+	cd frontend && pnpm build
+	pnpm dlx firebase-tools deploy --only hosting --project portofolio-487515
+
 down: ## Hentikan semua container
 	$(COMPOSE) down
 
