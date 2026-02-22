@@ -7,6 +7,10 @@
 
 Sistem riset otomatis berbasis AI yang mengadopsi arsitektur **Sequential Multi-Agent**. Project ini dirancang untuk menunjukkan kapabilitas orkestrasi model AI tingkat lanjut di **Google Cloud Vertex AI** dengan pendekatan modular monorepo.
 
+## 🌐 Live Demo
+- **Frontend:** [https://ai-researcher-app.web.app](https://ai-researcher-app.web.app)
+- **Backend API:** [https://ai-researcher-backend-2kxz62u5na-uc.a.run.app](https://ai-researcher-backend-2kxz62u5na-uc.a.run.app)
+
 ---
 
 ## 💎 Mengapa Project Ini Berguna? (Functional Value)

@@ -2,6 +2,14 @@
   "projects": {
     "default": "portofolio-487515"
   },
-  "targets": {},
+  "targets": {
+    "portofolio-487515": {
+      "hosting": {
+        "main": [
+          "ai-researcher-app"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

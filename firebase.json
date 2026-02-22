@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "ai-researcher-app",
     "public": "frontend/dist",
     "ignore": [
       "firebase.json",

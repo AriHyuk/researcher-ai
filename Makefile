@@ -16,7 +16,7 @@ deploy: ## Deploy backend ke Google Cloud Run
 
 deploy-fe: ## Deploy frontend ke Firebase Hosting
 	cd frontend && pnpm build
-	pnpm dlx firebase-tools deploy --only hosting --project portofolio-487515
+	pnpm dlx firebase-tools deploy --only hosting --project portofolio-487515 --only hosting:ai-researcher-app
 
 down: ## Hentikan semua container
 	$(COMPOSE) down
