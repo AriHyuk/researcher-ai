@@ -1,0 +1,22 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "8081:8080"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - ${APPDATA}/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+    restart: always
+
+  web:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    env_file:
+      - ./frontend/.env
+    restart: always

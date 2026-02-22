@@ -1,0 +1,10 @@
+# Backend .dockerignore
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+data/harvester/
+Dockerfile
+tests/
+.pytest_cache/

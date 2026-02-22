@@ -1,0 +1,16 @@
+# Root .dockerignore
+.git
+.gitignore
+.agent
+docs
+README.md
+Makefile
+scripts
+docker-compose.yml
+**/node_modules
+**/__pycache__
+**/.env*
+**/.venv
+**/dist
+**/venv
+**/data/harvester
