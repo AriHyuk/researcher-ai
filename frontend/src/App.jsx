@@ -25,7 +25,7 @@ function parseSSEBuffer(buffer) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// COMPONENT: Kartu Sumber Riset — ganti raw JSON yang jelek
+// COMPONENT: Kartu Sumber Riset — Representasi visual untuk data riset profesional
 // ──────────────────────────────────────────────────────────────────
 function ResearchSourceCard({ source, index }) {
   return (
@@ -92,7 +92,7 @@ function App() {
     setResult(null)
     setResearchData(null)
     setStreamingContent('')
-    setStatus('Memulai koneksi ke Agent...')
+    setStatus('Menghubungkan ke sistem agen...')
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/riset-lengkap`, {
@@ -173,7 +173,7 @@ function App() {
               <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">Penelitian</label>
               <textarea
                 className="w-full p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all duration-300 min-h-[100px]"
-                placeholder="Topik risetmu..."
+                placeholder="Masukkan topik penelitian Anda..."
                 value={topik}
                 onChange={(e) => setTopik(e.target.value)}
                 required
@@ -198,7 +198,7 @@ function App() {
                 <input
                   type="password"
                   className="w-full p-4 border border-slate-200 rounded-2xl bg-slate-50 outline-none placeholder:text-slate-300"
-                  placeholder="Paste Key Gemini-mu di sini..."
+                  placeholder="Masukkan API Key Gemini Anda di sini..."
                   value={geminiKey}
                   onChange={(e) => setGeminiKey(e.target.value)}
                 />
@@ -215,7 +215,7 @@ function App() {
                   <span className="text-xl animate-pulse">Running Agents...</span>
                   <span className="text-xs font-normal mt-1 text-blue-100 uppercase tracking-widest">{status}</span>
                 </div>
-              ) : 'GAS RISET!'}
+              ) : 'MULAI PENELITIAN'}
             </button>
           </form>
         </div>
@@ -225,7 +225,7 @@ function App() {
           <div className="bg-white p-10 rounded-3xl shadow-2xl border-l-[12px] border-blue-600 animate-pulse mb-8">
             <h3 className="text-blue-600 font-black mb-4 flex items-center gap-2">
               <span className="inline-block w-2 h-4 bg-blue-600 animate-bounce"></span>
-              WRITER GENERATING CONTENT...
+              PENULIS SEDANG MENYUSUN KONTEN...
             </h3>
             <div className="prose prose-slate max-w-none opacity-60">
               <ReactMarkdown>{streamingContent}</ReactMarkdown>
@@ -238,7 +238,7 @@ function App() {
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-100">
               <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-slate-50 pb-6 gap-4">
-                <h2 className="text-4xl font-black text-slate-900 -tracking-tight italic">the final paper.</h2>
+                <h2 className="text-4xl font-black text-slate-900 -tracking-tight">Laporan Penelitian Final</h2>
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Gemini 2.5 Pro Editor</span>
                   <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Verified Research</span>

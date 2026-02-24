@@ -86,7 +86,7 @@ class ResearchAgent:
         pipeline_metrics = {}
 
         try:
-            yield json.dumps({"status": "researching", "message": "🕵️ Researcher sedang mencari data ilmiah..."}) + "\n"
+            yield json.dumps({"status": "researching", "message": "Agen Peneliti sedang mengumpulkan data ilmiah..."}) + "\n"
             
             # STEP 1: RESEARCHER
             prompt_researcher = f"""
@@ -152,11 +152,11 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
             yield json.dumps({
                 "status": "research_done", 
                 "data": research_data.model_dump(),
-                "message": "✅ Data riset berhasil dikumpulkan."
+                "message": "Data penelitian berhasil dikumpulkan."
             }) + "\n"
 
             # STEP 2: WRITER
-            yield json.dumps({"status": "writing", "message": "✍️ Writer sedang menyusun draf akademik..."}) + "\n"
+            yield json.dumps({"status": "writing", "message": "Agen Penulis sedang menyusun draf akademik..."}) + "\n"
             prompt_writer = f"""
             PERAN: Academic Writer.
             DATA RISET: {research_data.model_dump_json()}
@@ -178,14 +178,14 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
                 yield json.dumps({"status": "writing_stream", "chunk": chunk.text}) + "\n"
             
             # STEP 3: EDITOR (Reflection Loop)
-            yield json.dumps({"status": "editing", "message": "🧐 Editor sedang melakukan Quality Control..."}) + "\n"
+            yield json.dumps({"status": "editing", "message": "Agen Editor sedang melakukan evaluasi kualitas..."}) + "\n"
             
             draft_content = full_draft
             revision_loops = 0
             editor_metrics_list = []
 
             for i in range(2):
-                yield json.dumps({"status": "editing", "message": f"🔄 Reflection Loop ke-{i+1}..."}) + "\n"
+                yield json.dumps({"status": "editing", "message": f"Siklus Peninjauan ke-{i+1}..."}) + "\n"
                 prompt_editor = f"""
                 PERAN: Senior Editor.
                 TOPIK: {topik}
@@ -201,7 +201,7 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
                 if res_editor.text.startswith("REVISI:"):
                     revision_loops += 1
                     feedback = res_editor.text
-                    yield json.dumps({"status": "revising", "message": "⚠️ Editor minta revisi!", "feedback": feedback}) + "\n"
+                    yield json.dumps({"status": "revising", "message": "Editor meminta revisi draf.", "feedback": feedback}) + "\n"
                     prompt_revisi = f"""
                     DRAFT SEBELUMNYA: {draft_content}
                     FEEDBACK EDITOR: {feedback}
@@ -237,7 +237,7 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
             yield json.dumps({
                 "status": "completed", 
                 "hasil_final": draft_content,
-                "message": "🎉 Riset selesai dan data telah disimpan!"
+                "message": "Proses penelitian selesai dan data telah berhasil disimpan."
             }) + "\n"
 
         except Exception as e:
