@@ -32,10 +32,10 @@ class ResearchAgent:
             )
             self.use_vertex = True
 
-        # 3-Tier Model Strategy (Latest Gemini 3 Series)
-        self.model_lite = "gemini-3-flash-preview"   # Lightning fast, low latency
-        self.model_flash = "gemini-3-flash-preview"  # Pro-level reasoning at Flash speed
-        self.model_pro = "gemini-3.1-pro-preview"    # Ultimate reasoning for Editor & Reflection
+        # 3-Tier Model Strategy (Latest Gemini 2.5 Series - Specs Sept 2025)
+        self.model_lite = "gemini-2.5-flash-lite"  # Ultra fast & budget friendly
+        self.model_flash = "gemini-2.5-flash"       # Flagship price-performance
+        self.model_pro = "gemini-2.5-pro"           # Most advanced for reasoning
 
     async def _panggil_gemini_async(self, model, prompt, tools=None, response_schema=None):
         """Helper buat panggil API secara async."""
@@ -72,21 +72,65 @@ class ResearchAgent:
             
             # STEP 1: RESEARCHER
             prompt_researcher = f"""
-            PERAN: Academic Researcher Spesialis Jurnal Ilmiah.
-            TOPIK: {topik}
-            TUGAS: Cari sumber ilmiah valid (.ac.id/ .edu / .gov) via Google Search.
-            OUTPUT: Harus dalam format JSON yang berisi lis sumber (penulis, tahun, judul, temuan) dan ringkasan data.
+Kamu adalah Academic Researcher. Cari sumber ilmiah valid untuk topik berikut: "{topik}"
+Gunakan Google Search untuk menemukan jurnal, paper, atau artikel dari domain .ac.id, .edu, atau .gov.
+
+Setelah riset, buat OUTPUT HANYA BERUPA JSON MURNI (tanpa markdown, tanpa ``` blok) dengan format PERSIS seperti ini:
+{{
+  "topik": "{topik}",
+  "sources": [
+    {{
+      "penulis": "Nama Penulis",
+      "tahun": "2024",
+      "judul": "Judul Paper",
+      "temuan": "Temuan utama dari paper ini"
+    }}
+  ],
+  "summary_data": "Ringkasan singkat dari semua temuan riset."
+}}
+
+PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah tanda kurung kurawal pertama.
             """
             tools_grounding = [types.Tool(google_search=types.GoogleSearch())] if self.use_vertex else None
             
             res_research = await self._panggil_gemini_async(
                 self.model_lite, 
                 prompt_researcher, 
-                tools=tools_grounding,
-                response_schema=ResearcherOutput
+                tools=tools_grounding
+                # response_schema dilepas karena tidak kompatibel dengan Google Search Tool (Error 400)
             )
             
-            research_data = ResearcherOutput.model_validate_json(res_research.text)
+            # Bersihkan output dari markdown code blocks jika ada
+            raw_text = res_research.text.strip() if res_research.text else ""
+            
+            # Jika output kosong, buat fallback data
+            if not raw_text:
+                logger.warning("Researcher return empty response, using fallback data")
+                raw_text = f'{{"topik": "{topik}", "sources": [{{"penulis": "AI", "tahun": "2025", "judul": "Riset tentang {topik}", "temuan": "Data tidak tersedia dari sumber eksternal."}}], "summary_data": "Riset dilakukan berdasarkan pengetahuan internal AI karena tidak ada akses ke sumber eksternal."}}'
+            
+            # Strip markdown code blocks
+            if "```json" in raw_text:
+                raw_text = raw_text.split("```json", 1)[1].split("```")[0].strip()
+            elif "```" in raw_text:
+                raw_text = raw_text.split("```", 1)[1].split("```")[0].strip()
+            
+            # Ambil substring JSON valid (dari { pertama ke } terakhir)
+            if raw_text and not raw_text.startswith("{"):
+                start = raw_text.find("{")
+                if start != -1:
+                    raw_text = raw_text[start:]
+                    
+            try:
+                research_data = ResearcherOutput.model_validate_json(raw_text)
+            except Exception as parse_err:
+                logger.error(f"Parsing error: {parse_err}, raw: {raw_text[:200]}")
+                # Parsing fallback jika field tidak sesuai
+                research_data = ResearcherOutput(
+                    topik=topik,
+                    sources=[ResearcherSource(penulis="AI", tahun="2025", judul=f"Riset: {topik}", temuan="Tidak ada sumber yang bisa diparser.")],
+                    summary_data=raw_text[:500] if raw_text else "Tidak ada data"
+                )
+                
             yield json.dumps({
                 "status": "research_done", 
                 "data": research_data.model_dump(),

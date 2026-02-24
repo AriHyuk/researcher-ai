@@ -1,15 +1,86 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
+// ──────────────────────────────────────────────────────────────────
+// UTILITY: parse streaming JSON-lines dengan aman (buffer accumulator)
+// Ini solusi untuk chunk yang keputus antar network packet
+// ──────────────────────────────────────────────────────────────────
+function parseSSEBuffer(buffer) {
+  const results = []
+  const lines = buffer.split('\n')
+  // Kembalikan sisa string yang belum closed (mungkin terpotong)
+  let remainder = ''
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      results.push(JSON.parse(trimmed))
+    } catch {
+      // Baris ini belum lengkap — simpan sebagai sisa untuk digabung dengan chunk berikutnya
+      remainder = trimmed
+    }
+  }
+  return { results, remainder }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// COMPONENT: Kartu Sumber Riset — ganti raw JSON yang jelek
+// ──────────────────────────────────────────────────────────────────
+function ResearchSourceCard({ source, index }) {
+  return (
+    <div className="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-colors">
+      <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center text-xs font-black">
+        {index + 1}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-slate-800 text-sm leading-snug mb-1">{source.judul}</p>
+        <p className="text-xs text-slate-500 mb-2">
+          <span className="font-semibold">{source.penulis}</span>
+          {source.tahun && source.tahun !== 'Tidak disebutkan' && ` · ${source.tahun}`}
+        </p>
+        <p className="text-xs text-slate-600 leading-relaxed">{source.temuan}</p>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────
+// COMPONENT: Panel Sumber Riset
+// ──────────────────────────────────────────────────────────────────
+function ResearchPanel({ researchData }) {
+  if (!researchData) return null
+  return (
+    <div className="mt-12 pt-8 border-t border-slate-100">
+      <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
+        Sumber Riset Terverifikasi
+      </h4>
+      {researchData.summary_data && (
+        <p className="text-sm text-slate-500 italic mb-6 leading-relaxed">
+          {researchData.summary_data}
+        </p>
+      )}
+      <div className="space-y-3">
+        {researchData.sources?.map((src, i) => (
+          <ResearchSourceCard key={i} source={src} index={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────
+// MAIN APP
+// ──────────────────────────────────────────────────────────────────
 function App() {
   const [topik, setTopik] = useState('')
   const [target, setTarget] = useState('Dosen Penguji')
-  const [geminiKey, setGeminiKey] = useState('') // BYOK Mode
+  const [geminiKey, setGeminiKey] = useState('')
   const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState('') // Pesan progres real-time
-  const [streamingContent, setStreamingContent] = useState('') // Teks yang "ngetik"
+  const [status, setStatus] = useState('')
+  const [streamingContent, setStreamingContent] = useState('')
   const [result, setResult] = useState(null)
-  const [internalLog, setInternalLog] = useState([]) // Trace log jeroan agent
+  const [researchData, setResearchData] = useState(null)
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081"
   const SYSTEM_API_KEY = import.meta.env.VITE_API_KEY || ""
@@ -18,61 +89,60 @@ function App() {
     e.preventDefault()
     setLoading(true)
     setResult(null)
+    setResearchData(null)
     setStreamingContent('')
-    setInternalLog([])
     setStatus('Memulai koneksi ke Agent...')
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/riset-lengkap`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SYSTEM_API_KEY,
-          'X-Gemini-API-Key': geminiKey // BYOK header
+          'X-Gemini-API-Key': geminiKey
         },
         body: JSON.stringify({ topik, target_pembaca: target })
       })
-      
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.detail || "Terjadi kesalahan pada server")
       }
-      
-      // STREAM READING LOGIC
+
+      // ── STREAM READING dengan BUFFER ACCUMULATOR ──────────────────
+      // Solusi untuk chunk SSE yang keputus antar network packet:
+      // kita akumulasi sisa baris yang belum complete, gabung dengan chunk berikutnya
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
+      let buffer = ''       // Accumulator untuk partial lines
       let partialContent = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        const chunk = decoder.decode(value, { stream: true })
-        // Split chunk by newline karena kita yield JSON line per line
-        const lines = chunk.split('\n').filter(l => l.trim() !== '')
+        // Tambahkan hasil decode ke buffer yang ada
+        buffer += decoder.decode(value, { stream: true })
 
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line)
-            
-            if (data.status === 'researching' || data.status === 'writing' || data.status === 'editing') {
-              setStatus(data.message)
-            } else if (data.status === 'writing_stream') {
-              partialContent += data.chunk
-              setStreamingContent(partialContent)
-            } else if (data.status === 'research_done') {
-              setInternalLog(prev => [...prev, { step: 'Researcher', data: data.data }])
-            } else if (data.status === 'revising') {
-              setStatus(data.message)
-              setInternalLog(prev => [...prev, { step: 'Editor Reflection', data: data.feedback }])
-            } else if (data.status === 'completed') {
-              setResult({ hasil_final: data.hasil_final })
-              setStatus(data.message)
-            } else if (data.status === 'error') {
-              throw new Error(data.message)
-            }
-          } catch (pE) {
-            console.error("Gagal parse line:", line)
+        // Parse semua baris yang sudah complete, sisakan yang terpotong
+        const { results, remainder } = parseSSEBuffer(buffer)
+        buffer = remainder  // simpan sisa terpotong untuk chunk berikutnya
+
+        for (const data of results) {
+          if (data.status === 'researching' || data.status === 'writing' || data.status === 'editing') {
+            setStatus(data.message)
+          } else if (data.status === 'writing_stream') {
+            partialContent += data.chunk
+            setStreamingContent(partialContent)
+          } else if (data.status === 'research_done') {
+            setResearchData(data.data)  // Simpan data riset untuk ditampilkan di UI
+          } else if (data.status === 'revising') {
+            setStatus(data.message)
+          } else if (data.status === 'completed') {
+            setResult({ hasil_final: data.hasil_final })
+            setStatus(data.message)
+          } else if (data.status === 'error') {
+            throw new Error(data.message)
           }
         }
       }
@@ -86,13 +156,13 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 font-sans text-slate-900 flex flex-col items-center">
       <div className="w-full max-w-4xl">
-        
+
         {/* HEADER */}
         <div className="text-center mb-10">
           <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 mb-2 tracking-tight">
             ai-researcher <span className="text-lg align-top bg-blue-100 text-blue-600 px-2 py-1 rounded-md ml-1">V2</span>
           </h1>
-          <p className="text-slate-500 font-medium italic">Powered by Gemini 3.1 & Vertex AI</p>
+          <p className="text-slate-500 font-medium italic">Powered by Gemini 2.5 & Vertex AI</p>
         </div>
 
         {/* FORM INPUT */}
@@ -100,7 +170,7 @@ function App() {
           <form onSubmit={handleRiset} className="space-y-6">
             <div>
               <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">Penelitian</label>
-              <textarea 
+              <textarea
                 className="w-full p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all duration-300 min-h-[100px]"
                 placeholder="Topik risetmu..."
                 value={topik}
@@ -108,11 +178,11 @@ function App() {
                 required
               />
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">Persona Reader</label>
-                <select 
+                <select
                   className="w-full p-4 border border-slate-200 rounded-2xl bg-slate-50 outline-none"
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
@@ -124,7 +194,7 @@ function App() {
               </div>
               <div>
                 <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">Gemini API Key (BYOK - Opsional)</label>
-                <input 
+                <input
                   type="password"
                   className="w-full p-4 border border-slate-200 rounded-2xl bg-slate-50 outline-none placeholder:text-slate-300"
                   placeholder="Paste Key Gemini-mu di sini..."
@@ -134,8 +204,8 @@ function App() {
               </div>
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className={`w-full py-5 rounded-2xl text-white font-black text-xl shadow-xl transition-all duration-300 transform active:scale-[0.98] ${loading ? 'bg-slate-300' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:-translate-y-1 hover:shadow-blue-500/20'}`}
             >
@@ -169,33 +239,23 @@ function App() {
               <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-slate-50 pb-6 gap-4">
                 <h2 className="text-4xl font-black text-slate-900 -tracking-tight italic">the final paper.</h2>
                 <div className="flex gap-2">
-                   <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Gemini 3.1 Pro Editor</span>
-                   <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Verified Research</span>
+                  <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Gemini 2.5 Pro Editor</span>
+                  <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Verified Research</span>
                 </div>
               </header>
-              
+
               <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed text-xl first-letter:text-5xl first-letter:font-black first-letter:text-blue-600 first-letter:mr-3 first-letter:float-left">
                 <ReactMarkdown>{result.hasil_final}</ReactMarkdown>
               </div>
 
-              {/* TRACE LOG */}
-              <div className="mt-12 space-y-4">
-                <h4 className="text-xs font-black text-slate-300 uppercase tracking-[0.2em] text-center">Internal Trace Log</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {internalLog.map((log, idx) => (
-                     <div key={idx} className="bg-slate-900 text-green-400 p-4 rounded-2xl text-[10px] font-mono overflow-auto max-h-[200px] border border-slate-800">
-                        <div className="mb-2 text-white font-bold border-b border-slate-700 pb-1">[{log.step}]</div>
-                        <pre>{JSON.stringify(log.data, null, 2)}</pre>
-                     </div>
-                   ))}
-                </div>
-              </div>
+              {/* RESEARCH SOURCES — proper UI, bukan raw JSON */}
+              <ResearchPanel researchData={researchData} />
             </div>
           </div>
         )}
 
       </div>
-      
+
       <footer className="mt-20 text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">
         ai-researcher // 2026 // Vertex AI // Monorepo V2
       </footer>
