@@ -4,7 +4,10 @@ Thumbs.db
 
 # Project Specific (Requested)
 .agent/
-backend/data/harvester/
+backend/data/
+docs/
+.firebase/
+*.log
 
 # Environment & Secrets
 .env

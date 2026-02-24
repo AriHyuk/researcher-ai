@@ -1,6 +1,7 @@
 import logging
 import json
 import asyncio
+import time
 from typing import AsyncGenerator
 from google import genai
 from google.genai import types
@@ -38,7 +39,7 @@ class ResearchAgent:
         self.model_pro = "gemini-2.5-pro"           # Most advanced for reasoning
 
     async def _panggil_gemini_async(self, model, prompt, tools=None, response_schema=None):
-        """Helper buat panggil API secara async."""
+        """Helper buat panggil API secara async, sekaligus capture observability metrics."""
         config_dict = {
             "temperature": 0.3,
             "tools": tools,
@@ -49,10 +50,8 @@ class ResearchAgent:
 
         config = types.GenerateContentConfig(**config_dict)
         
-        # Karena SDK genai mungkin belum semua async-native di wrapper-nya, 
-        # kita bungkus pake run_in_executor jika perlu, tapi terbaru biasanya support.
-        # Untuk demo ini kita pake sync call tapi dibungkus biar gak block event loop.
         loop = asyncio.get_event_loop()
+        t_start = time.perf_counter()
         response = await loop.run_in_executor(
             None, 
             lambda: self.client.models.generate_content(
@@ -61,12 +60,31 @@ class ResearchAgent:
                 config=config
             )
         )
-        return response
+        latency_ms = round((time.perf_counter() - t_start) * 1000)
+
+        # Ambil usage metadata — ini yang biasanya dibuang
+        usage = response.usage_metadata
+        finish_reason = str(response.candidates[0].finish_reason) if response.candidates else "UNKNOWN"
+
+        metrics = {
+            "model": model,
+            "latency_ms": latency_ms,
+            "tokens_in": usage.prompt_token_count if usage else None,
+            "tokens_out": usage.candidates_token_count if usage else None,
+            "tokens_total": usage.total_token_count if usage else None,
+            "finish_reason": finish_reason,
+        }
+        logger.info(f"📊 [{model}] latency={latency_ms}ms | tokens={metrics['tokens_total']} | finish={finish_reason}")
+
+        return response, metrics
 
     async def stream_sequential_research(self, topik: str, target_pembaca: str) -> AsyncGenerator[str, None]:
         """
         Main pipeline dengan generator streaming (SSE style).
         """
+        # Kumpulkan metrics tiap agen untuk disimpan ke harvester
+        pipeline_metrics = {}
+
         try:
             yield json.dumps({"status": "researching", "message": "🕵️ Researcher sedang mencari data ilmiah..."}) + "\n"
             
@@ -93,12 +111,12 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
             """
             tools_grounding = [types.Tool(google_search=types.GoogleSearch())] if self.use_vertex else None
             
-            res_research = await self._panggil_gemini_async(
+            res_research, metrics_researcher = await self._panggil_gemini_async(
                 self.model_lite, 
                 prompt_researcher, 
                 tools=tools_grounding
-                # response_schema dilepas karena tidak kompatibel dengan Google Search Tool (Error 400)
             )
+            pipeline_metrics["researcher"] = metrics_researcher
             
             # Bersihkan output dari markdown code blocks jika ada
             raw_text = res_research.text.strip() if res_research.text else ""
@@ -163,6 +181,9 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
             yield json.dumps({"status": "editing", "message": "🧐 Editor sedang melakukan Quality Control..."}) + "\n"
             
             draft_content = full_draft
+            revision_loops = 0
+            editor_metrics_list = []
+
             for i in range(2):
                 yield json.dumps({"status": "editing", "message": f"🔄 Reflection Loop ke-{i+1}..."}) + "\n"
                 prompt_editor = f"""
@@ -174,9 +195,11 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
                 2. Jika SUDAH BAGUS, balas hanya dengan naskah final.
                 3. Jika MASIH KURANG, awali dengan 'REVISI:' lalu feedback detail.
                 """
-                res_editor = await self._panggil_gemini_async(self.model_pro, prompt_editor)
+                res_editor, metrics_editor = await self._panggil_gemini_async(self.model_pro, prompt_editor)
+                editor_metrics_list.append(metrics_editor)
                 
                 if res_editor.text.startswith("REVISI:"):
+                    revision_loops += 1
                     feedback = res_editor.text
                     yield json.dumps({"status": "revising", "message": "⚠️ Editor minta revisi!", "feedback": feedback}) + "\n"
                     prompt_revisi = f"""
@@ -184,15 +207,32 @@ PENTING: Output harus LANGSUNG JSON, tidak ada teks lain sebelum atau sesudah ta
                     FEEDBACK EDITOR: {feedback}
                     TUGAS: Perbaiki draf.
                     """
-                    res_writer = await self._panggil_gemini_async(self.model_flash, prompt_revisi)
-                    draft_content = res_writer.text
-                    yield json.dumps({"status": "writing_stream", "chunk": "[REVISED CONTENT GENERATED]"}) + "\n"
+                    # Stream hasil revisi ke frontend (bukan placeholder)
+                    config_revisi = types.GenerateContentConfig(temperature=0.7)
+                    stream_revisi = self.client.models.generate_content_stream(
+                        model=self.model_flash,
+                        contents=prompt_revisi,
+                        config=config_revisi
+                    )
+                    draft_content = ""
+                    for chunk in stream_revisi:
+                        draft_content += chunk.text
+                        yield json.dumps({"status": "writing_stream", "chunk": chunk.text}) + "\n"
                 else:
                     draft_content = res_editor.text
                     break
 
-            # SAVE DATA
-            await harvester.save_research(topik, draft_content, research_data.sources)
+            # Aggregasi metrics editor — ambil total token & latency
+            pipeline_metrics["editor"] = {
+                "model": self.model_pro,
+                "revision_loops": revision_loops,
+                "total_latency_ms": sum(m["latency_ms"] for m in editor_metrics_list),
+                "total_tokens": sum(m["tokens_total"] or 0 for m in editor_metrics_list),
+                "finish_reasons": [m["finish_reason"] for m in editor_metrics_list],
+            }
+
+            # SAVE DATA (termasuk pipeline metrics untuk observability)
+            await harvester.save_research(topik, draft_content, research_data.sources, pipeline_metrics)
             
             yield json.dumps({
                 "status": "completed", 

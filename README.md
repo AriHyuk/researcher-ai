@@ -1,124 +1,149 @@
-# 🦍 ai-researcher // Sequential Multi-Agent Research System
+# 🦍 ai-researcher
+### *Turn a research topic into a full academic draft in under 2 minutes.*
 
+[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-ai--researcher--app.web.app-4285F4?style=for-the-badge)](https://ai-researcher-app.web.app)
 [![GCP](https://img.shields.io/badge/Google%20Cloud-Vertex%20AI-blue?logo=google-cloud&logoColor=white)](https://cloud.google.com/vertex-ai)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/Frontend-React-61DAFB?logo=react&logoColor=white)](https://reactjs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Orchestrated-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-Sistem riset otomatis berbasis AI yang mengadopsi arsitektur **Sequential Multi-Agent**. Project ini dirancang untuk menunjukkan kapabilitas orkestrasi model AI tingkat lanjut di **Google Cloud Vertex AI** dengan pendekatan modular monorepo.
+> **Problem:** Writing a literature review takes 2–4 hours of searching, reading, and synthesizing.  
+> **Solution:** ai-researcher does it in ~90 seconds — with real citations, not hallucinations.
+
+---
 
 ## 🌐 Live Demo
 
-- **Frontend:** [https://ai-researcher-app.web.app](https://ai-researcher-app.web.app)
-- **Backend API:** [https://ai-researcher-backend-2kxz62u5na-uc.a.run.app](https://ai-researcher-backend-2kxz62u5na-uc.a.run.app)
+| Service | URL |
+| :--- | :--- |
+| **Frontend App** | [ai-researcher-app.web.app](https://ai-researcher-app.web.app) |
+| **Backend API** | [ai-researcher-backend-2kxz62u5na-uc.a.run.app](https://ai-researcher-backend-2kxz62u5na-uc.a.run.app) |
+| **API Docs** | [.../docs](https://ai-researcher-backend-2kxz62u5na-uc.a.run.app/docs) |
 
 ---
 
-## 💎 Mengapa Project Ini Berguna? (Functional Value)
+## 🧲 What Makes This Different
 
-Project ini bukan cuma buat "keren-kerenan" Docker atau AI. Secara fungsional, ini adalah solusi untuk **Research Bottleneck**:
+Most "AI research tools" are just wrappers around a single LLM prompt. This isn't.
 
-1. **Automated Literature Review:** Mencari dan merangkum 4-10 sumber terpercaya dalam 15 detik. Manual? Bisa 2 jam.
-2. **Dataset Engine (The JSONL Value):** File di `backend/data/harvester/` adalah aset paling berharga. Ini adalah data **High-Quality Synthetic Research**.
-   - *Scenario:* Abang mau bikin AI yang jago riset gaya abang sendiri. Abang butuh ribuan contoh. Tool ini otomatis "memanen" contoh-contoh itu setiap kali abang riset.
-3. **Cross-Check Validation:** Dengan Google Search Grounding, hasil tulisan bukan sekadar karangan AI (halusinasi), tapi ada referensinya.
-4. **Academic Workflow Automation:** Menggantikan proses *Drafting -> Peer Review -> Revision* yang biasanya manual jadi otomatis lewat agen Editor.
+**ai-researcher runs a coordinated pipeline of three specialized AI agents:**
 
-> [!IMPORTANT]
-> **Real World Value:** Perusahaan AI besar membayar mahal untuk data "Research-to-Draft" yang berkualitas. Tool ini membuat abang bisa memproduksi data tersebut secara mandiri.
+```
+User Input
+    └─► Researcher (Gemini Flash)   ← finds real sources via Google Search Grounding
+            └─► Writer (Gemini Flash)    ← synthesizes into academic prose
+                    └─► Editor (Gemini Pro)      ← reviews, requests revision if needed
+                            └─► Final Paper  ← streamed live to the UI
+```
+
+Each agent has a single responsibility. The Editor can loop back to the Writer up to 2 times before approving — mimicking a real peer-review cycle.
 
 ---
 
-## 🧠 System Architecture
+## 💡 Core Features
 
-Project ini menggunakan tiga agen terspesialisasi yang bekerja secara berurutan untuk menghasilkan riset berkualitas akademik.
+| Feature | What it does |
+| :--- | :--- |
+| **🗞️ Sequential Multi-Agent** | 3 agents with distinct roles, orchestrated in series — not a single monolithic prompt |
+| **📡 Real-time SSE Streaming** | Every agent logs its progress live to the UI as it happens |
+| **🔑 BYOK (Bring Your Own Key)** | Plug in your Gemini API key in the UI, or use the Vertex AI system mode — no config change needed |
+| **🔍 Google Search Grounding** | Researcher queries live internet data, citations are grounded in real sources |
+| **🌾 Dataset Harvester** | Every research cycle is auto-saved as JSONL — a ready-made dataset for AI fine-tuning |
+| **📊 LLM Observability** | Latency, token usage, and cost estimate logged per agent, per request |
+
+---
+
+## 🌾 The Dataset Angle (Unique Value)
+
+Every time someone uses this tool, the full `topic → research → draft` cycle is saved to `backend/data/harvester/` as JSONL:
+
+```json
+{
+  "topic": "Scrum in e-commerce development",
+  "sources": [...],
+  "final_report": "...",
+  "observability": {
+    "pipeline_metrics": {
+      "researcher": { "latency_ms": 3100, "tokens_total": 820 },
+      "editor":     { "revision_loops": 1, "total_tokens": 4200 }
+    },
+    "cost_estimate_usd": 0.000067
+  }
+}
+```
+
+> Each row = one high-quality training example for fine-tuning a domain-specific research AI.  
+> This is a **self-harvesting data flywheel** — the more it's used, the richer the dataset.
+
+---
+
+## 🧠 Architecture
 
 ```mermaid
 graph TD
     A[User Input] --> B[FastAPI Gateway]
     B --> C{Sequential Pipeline}
-    
+
     subgraph Agents
-        C --> D["Researcher (Gemini 3 Flash)"]
-        D --> E["Writer (Gemini 3 Flash)"]
-        E --> F["Editor (Gemini 3.1 Pro)"]
-        F -- "Need Revision" --> E
-        F -- "Approved" --> G[Final Result]
+        C --> D["🔍 Researcher (Gemini Flash Lite)"]
+        D --> E["✍️ Writer (Gemini Flash)"]
+        E --> F["🧐 Editor (Gemini Pro)"]
+        F -- "REVISI: feedback" --> E
+        F -- "Approved" --> G[Final Paper]
     end
-    
+
     D -.-> H[Google Search Grounding]
-    G --> I[Streaming Response / SSE]
-    G --> J[Data Harvester / JSONL]
-    
-    classDef agent fill:#f9f,stroke:#333,stroke-width:2px;
+    G --> I[SSE Stream → UI]
+    G --> J[JSONL Harvester]
+
+    classDef agent fill:#e0f0ff,stroke:#3b82f6,stroke-width:2px;
     class D,E,F agent;
 ```
 
 ---
 
-## � Fitur Unggulan (Core Highlights)
-
-| Fitur | Deskripsi | Tech |
-| :--- | :--- | :--- |
-| **🤖 Sequential Multi-Agent** | Alur kerja terstruktur: **Researcher** mencari data, **Writer** menyusun draf, **Editor** melakukan review & revisi otomatis. | Gemini Flash + Pro |
-| **� BYOK (Bring Your Own Key)** | Mendukung penggunaan **Gemini API Key** (Public) atau **Vertex AI** (GCP Enterprise) lewat deteksi header dinamis. | Dual-Auth Strategy |
-| **📡 Live Streaming SSE** | Pengalaman pengguna real-time dengan progres log transparan saat agen bekerja (Server-Sent Events). | FastAPI Streaming |
-| **🏢 Data Harvester** | Fitur 'panen' data otomatis yang menyimpan setiap cycle riset ke dalam format `JSONL` untuk dataset fine-tuning AI. | JSONL Persistence |
-| **�️ Google Grounding** | Menjamin hasil tulisan akurat dan valid berdasarkan data internet real-time (bukan sekadar karangan AI). | Search Grounding SDK |
-
----
-
 ## 🛠️ Tech Stack
 
-- **Backend:** Python, FastAPI, Pydantic V2, Google GenAI SDK.
-- **Frontend:** React, Vite, Tailwind CSS, React-Markdown.
-- **Infrastructure:** Docker, Docker Compose, Google Cloud Vertex AI.
+| Layer | Tech |
+| :--- | :--- |
+| **Backend** | Python 3.12, FastAPI, Pydantic V2, Google GenAI SDK |
+| **Frontend** | React 19, Vite 7, Tailwind CSS 4 |
+| **AI** | Gemini 2.5 Flash Lite / Flash / Pro (3-tier model strategy) |
+| **Infrastructure** | Docker, Docker Compose, GCP Cloud Run, Firebase Hosting |
 
 ---
 
 ## ⚡ Quick Start
 
-Pastikan Anda sudah menginstall **Docker** dan **Make**.
+```bash
+git clone https://github.com/AriHyuk/ai-researcher.git
+cd ai-researcher
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+make up
+```
 
+Open `http://localhost:3000`. Docker & Make required.
 
-1. **Clone & Setup Env:**
-
-   ```bash
-   git clone https://github.com/AriHyuk/ai-researcher.git
-   cd ai-researcher
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env.local
-   ```
-
-2. **Run Everything:**
-
-   ```bash
-   make up
-   ```
-
-3. **Akses UI:**
-   Buka `http://localhost:3000` di browser favorit Anda.
+**Makefile shortcuts:** `make up` · `make logs` · `make restart` · `make clean`
 
 ---
 
-## 📜 Makefile Commands
+## 🛡️ Engineering Practices
 
-Gunakan `make help` untuk melihat semua shortcut:
-
-- `make up` - Jalankan semua container.
-- `make logs` - Lihat log real-time.
-- `make restart` - Restart semua layanan.
-- `make clean` - Bersihkan system (volumes & images).
-
----
-
-## 🛡️ Best Practices Applied
-
-- **SOLID & DRY Principles** in AI Orchestration.
-- **AWS Well-Architected Adaptation** for GCP Reliability.
-- **Conventional Commits** for versioning excellence.
-- **12-Factor App** methodology.
+- **SOLID & DRY** applied in agent orchestration layer
+- **12-Factor App** methodology
+- **LLM Observability** — latency + token + cost tracked per agent call
+- **Conventional Commits** for version history
+- **Dual-environment config** — `.env` for production, `.env.local` for local dev
 
 ---
 
-Created with ❤️ for Advanced AI Research Portfolio.
+## 📖 Documentation
+
+- [User Guide](docs/USER_GUIDE.md) — how to get the most out of this tool
+- [Changelog](docs/CHANGELOG.md)
+
+---
+
+*Built to demonstrate advanced AI orchestration on Google Cloud. Not just a wrapper — a system.*

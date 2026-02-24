@@ -74,6 +74,7 @@ function ResearchPanel({ researchData }) {
 // ──────────────────────────────────────────────────────────────────
 function App() {
   const [topik, setTopik] = useState('')
+  const [copied, setCopied] = useState(false)
   const [target, setTarget] = useState('Dosen Penguji')
   const [geminiKey, setGeminiKey] = useState('')
   const [loading, setLoading] = useState(false)
@@ -238,9 +239,33 @@ function App() {
             <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-100">
               <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-slate-50 pb-6 gap-4">
                 <h2 className="text-4xl font-black text-slate-900 -tracking-tight italic">the final paper.</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                   <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Gemini 2.5 Pro Editor</span>
                   <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded-lg uppercase tracking-tighter">Verified Research</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(result.hasil_final)
+                      setCopied(true)
+                      setTimeout(() => setCopied(false), 2000)
+                    }}
+                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black rounded-lg uppercase tracking-tighter transition-colors"
+                  >
+                    {copied ? '✅ Copied!' : '📋 Copy MD'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([result.hasil_final], { type: 'text/markdown' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `${topik.slice(0, 40).replace(/\s+/g, '-')}.md`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                    className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-[10px] font-black rounded-lg uppercase tracking-tighter transition-colors"
+                  >
+                    ⬇️ Download .md
+                  </button>
                 </div>
               </header>
 
